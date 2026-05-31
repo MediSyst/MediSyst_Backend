@@ -1,0 +1,148 @@
+// MediSyst - Schema do Banco de Dados
+// Documentação: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  ADMIN
+  DOCTOR
+  RECEPTIONIST
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  REMINDED
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_RESPONSE
+}
+
+enum ReminderStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+}
+
+enum WaitingListStatus {
+  WAITING
+  OFFERED
+  ACCEPTED
+  EXPIRED
+}
+
+// ============================================
+// MODELS
+// ============================================
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      UserRole @default(DOCTOR)
+  phone     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  appointments   Appointment[]
+  reminderConfig ReminderConfig?
+
+  @@map("users")
+}
+
+model Patient {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String   @unique // Número WhatsApp
+  email     String?
+  notes     String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  appointments Appointment[]
+  waitingList  WaitingListEntry[]
+
+  @@map("patients")
+}
+
+model Appointment {
+  id        String            @id @default(uuid())
+  date      DateTime
+  duration  Int               @default(30) // Duração em minutos
+  status    AppointmentStatus @default(SCHEDULED)
+  notes     String?
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+
+  doctorId  String  @map("doctor_id")
+  doctor    User    @relation(fields: [doctorId], references: [id])
+  patientId String  @map("patient_id")
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  reminders ReminderLog[]
+
+  @@index([doctorId, date])
+  @@index([patientId])
+  @@index([status])
+  @@map("appointments")
+}
+
+model ReminderConfig {
+  id             String   @id @default(uuid())
+  hoursBefore    Int      @default(24)
+  secondReminder Int?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  doctorId String @unique @map("doctor_id")
+  doctor   User   @relation(fields: [doctorId], references: [id])
+
+  @@map("reminder_configs")
+}
+
+model ReminderLog {
+  id          String         @id @default(uuid())
+  status      ReminderStatus @default(PENDING)
+  sentAt      DateTime?      @map("sent_at")
+  deliveredAt DateTime?      @map("delivered_at")
+  response    String?
+  createdAt   DateTime       @default(now()) @map("created_at")
+
+  appointmentId String      @map("appointment_id")
+  appointment   Appointment @relation(fields: [appointmentId], references: [id])
+
+  @@index([appointmentId])
+  @@map("reminder_logs")
+}
+
+model WaitingListEntry {
+  id            String            @id @default(uuid())
+  status        WaitingListStatus @default(WAITING)
+  preferredDate DateTime?         @map("preferred_date")
+  notes         String?
+  createdAt     DateTime          @default(now()) @map("created_at")
+  updatedAt     DateTime          @updatedAt @map("updated_at")
+
+  patientId String  @map("patient_id")
+  patient   Patient @relation(fields: [patientId], references: [id])
+  doctorId  String? @map("doctor_id")
+
+  @@index([status])
+  @@index([patientId])
+  @@map("waiting_list")
+}
